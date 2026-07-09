@@ -16,14 +16,14 @@ logging.basicConfig(
 logger = logging.getLogger("ai-review")
 
 # --- Settings ---
-REQUIRED_ENV = ["LLM_API_KEY", "GITLAB_API_TOKEN", "CI_PROJECT_ID", "CI_MERGE_REQUEST_IID", "CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "CI_API_V4_URL"]
+REQUIRED_ENV = ["LLM_API_KEY", "CI_JOB_TOKEN", "CI_PROJECT_ID", "CI_MERGE_REQUEST_IID", "CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "CI_API_V4_URL"]
 for env_key in REQUIRED_ENV:
     if not os.getenv(env_key):
         logger.error("Required environment variable %s is not set", env_key)
         sys.exit(1)
 
 OPENAI_API_KEY = os.getenv("LLM_API_KEY")
-GITLAB_TOKEN = os.getenv("GITLAB_API_TOKEN")
+GITLAB_TOKEN = os.getenv("CI_JOB_TOKEN")
 PROJECT_ID = os.getenv("CI_PROJECT_ID")
 MR_IID = os.getenv("CI_MERGE_REQUEST_IID")
 TARGET_BRANCH = os.getenv("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
@@ -32,13 +32,16 @@ GITLAB_API_URL = os.getenv("CI_API_V4_URL")
 CONTEXT_MODEL = os.getenv("CONTEXT_MODEL", "gpt-4o-mini")
 REVIEW_MODEL = os.getenv("REVIEW_MODEL", "gpt-4o")
 REVIEW_LANG = os.getenv("REVIEW_LANG", "Russian")  # default to Russian
-MAX_DIFF_SNIPPET = 4000   # chars for context-detection step
+MAX_DIFF_SNIPPET = 80000   # chars for context-detection step
 MAX_REVIEW_DIFF = 80000   # chars for final review step (rough token guard)
 LLM_TIMEOUT = 60          # seconds
 GITLAB_TIMEOUT = 15       # seconds
-MAX_FILE_LINES = 2000     # per-file read limit
+MAX_FILE_LINES = 20000     # per-file read limit
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url=os.getenv("OPENAI_BASE_URL"),
+)
 
 
 def get_git_diff():
@@ -178,7 +181,7 @@ def review_code_with_context(diff, context_files_content, language=REVIEW_LANG):
 )
 def post_mr_comment(comment_body):
     """Post a comment to the Merge Request via GitLab API (with retry)."""
-    url = f"{GITLAB_API_URL}/projects/{PROJECT_ID}/merge_requests/{MR_IID}/notes"
+    url = f"{GITLAB_API_URL.rstrip('/')}/projects/{PROJECT_ID}/merge_requests/{MR_IID}/notes"
     headers = {"PRIVATE-TOKEN": GITLAB_TOKEN}
     data = {"body": f"🤖 **AI Code Review Agent**\n\n{comment_body}"}
 
